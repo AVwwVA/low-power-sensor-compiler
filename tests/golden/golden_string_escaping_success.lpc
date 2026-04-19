@@ -1,0 +1,6 @@
+
+extern Serial::println(msg: string) -> void
+
+every 1s {
+    Serial::println("line1\n\"quote\"\\path\tend\r")
+}

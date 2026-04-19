@@ -1,0 +1,51 @@
+
+
+
+
+extern Serial::println(msg: string) -> void
+
+unit psi : pressure {
+    to_pa: val * 6894.76,
+    from_pa: val / 6894.76
+}
+
+unit bar : pressure {
+    to_pa: val * 100000.0,
+    from_pa: val / 100000.0
+}
+
+unit lpm : flow {
+    to_base: val,
+    from_base: val
+}
+
+unit cfm : flow {
+    to_base: val * 28.3168,
+    from_base: val / 28.3168
+}
+
+unit tick : time {
+    to_ms: val * 10,
+    from_ms: val / 10
+}
+
+sensor pressure_sensor on A0
+sensor flow_sensor on A1
+
+every 100tick {
+    read pressure_sensor -> pressure_raw
+    read flow_sensor -> flow_raw
+
+    pressure = 10psi + 1bar
+    flow = 20lpm + 1cfm
+
+    if (pressure > 15psi) {
+        Serial::println("Pressure warning")
+        sleep 40tick
+    }
+    if (flow > 30lpm) {
+        Serial::println("Flow warning")
+    }
+
+    sleep 50tick
+}

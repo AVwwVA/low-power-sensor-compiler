@@ -1,0 +1,33 @@
+
+unit kelvin : temperature {
+    to_celsius: val - 273,
+    from_celsius: val + 273
+}
+
+unit fahrenheit : temperature {
+    to_celsius: (val - 32) * 5 / 9,
+    from_celsius: val * 9 / 5 + 32
+}
+
+unit inches : distance {
+    to_meters: val * 0.0254,
+    from_meters: val / 0.0254
+}
+
+unit feet : distance {
+    to_meters: val * 0.3048,
+    from_meters: val / 0.3048
+}
+
+sensor temp on A0
+output buzz on D0
+
+every 5s {
+    read temp -> t
+
+    # Use custom unit literal in threshold comparison
+    if (t > 300kelvin) {
+        sleep 1s
+    }
+}
+

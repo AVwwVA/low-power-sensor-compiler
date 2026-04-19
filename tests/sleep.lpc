@@ -1,0 +1,14 @@
+
+
+sensor temp on A0
+output buzz on D0
+
+
+every 5s {
+    read temp -> t
+    x = 10s
+    if (t > 30) {
+        sleep 1s
+        write buzz <- 255
+    }
+}

@@ -1,0 +1,4 @@
+arch = "avr"
+clock_hz = 16000000
+c_includes = []
+c_prelude = []

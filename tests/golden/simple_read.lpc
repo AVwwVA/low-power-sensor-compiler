@@ -1,0 +1,10 @@
+
+
+
+sensor temp on A0
+extern printf(x : String) -> void
+
+every 5s {
+    read temp -> t
+
+}

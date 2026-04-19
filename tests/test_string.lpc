@@ -1,0 +1,7 @@
+sensor temp on A0
+extern printf(x : string) -> void
+
+every 5s {
+    read temp -> t
+    printf("Value: ")
+}

@@ -1,0 +1,10 @@
+
+fn convert_tick(raw: int) -> int {
+    return raw
+}
+
+sensor tick_sensor on A0 : time using convert_tick
+
+every 1s {
+    read tick_sensor -> t
+}

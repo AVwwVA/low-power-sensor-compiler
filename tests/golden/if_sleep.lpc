@@ -1,0 +1,11 @@
+
+
+
+sensor temp on A0
+
+every 5s {
+    read temp -> t
+    if (t > 30) {
+        sleep 1s
+    }
+}

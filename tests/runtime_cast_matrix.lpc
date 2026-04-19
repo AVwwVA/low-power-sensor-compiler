@@ -1,0 +1,50 @@
+extern Serial::println(msg: string) -> void
+
+fn cast_int(v: int) -> int {
+    return v
+}
+
+fn cast_float(v: float) -> float {
+    return v
+}
+
+fn cast_bool(v: bool) -> bool {
+    return v
+}
+
+every 1s {
+    Serial::println("CAST_BEGIN")
+
+    s2i = cast_int("123")
+    Serial::println("CAST|s2i|" + s2i)
+
+    s2f = cast_float("3.5")
+    Serial::println("CAST|s2f|" + s2f)
+
+    s2b_empty = cast_bool("")
+    Serial::println("CAST|s2b_empty|" + s2b_empty)
+
+    s2b_text = cast_bool("abc")
+    Serial::println("CAST|s2b_text|" + s2b_text)
+
+    f2i = cast_int(12.75)
+    Serial::println("CAST|f2i|" + f2i)
+
+    i2f = cast_float(42)
+    Serial::println("CAST|i2f|" + i2f)
+
+    Serial::println("CAST|i2s|" + 42)
+
+    f2s_src = cast_float("6.25")
+    Serial::println("CAST|f2s|" + f2s_src)
+
+    Serial::println("CAST|b2s_true|" + true)
+    Serial::println("CAST|b2s_false|" + false)
+
+    mix_int = cast_int("7")
+    mix_float = cast_float("2.5")
+    mix_bool = cast_bool("ok")
+    Serial::println("CAST|concat_mix|" + "A=" + mix_int + ",B=" + mix_float + ",C=" + mix_bool)
+
+    Serial::println("CAST_END")
+}

@@ -1,0 +1,10 @@
+
+fn convert_temp(raw: int) -> float {
+    return 0.0
+}
+
+sensor temp on A0 : temperature using convert_temp
+
+every 1s {
+    read temp -> t
+}

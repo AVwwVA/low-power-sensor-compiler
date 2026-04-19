@@ -1,0 +1,7 @@
+
+unit tick : time {
+    to_ms: val / 0,
+    from_ms: val
+}
+
+every 1tick { }

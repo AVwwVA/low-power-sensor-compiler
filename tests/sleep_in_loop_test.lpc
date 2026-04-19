@@ -1,0 +1,35 @@
+
+
+sensor temp on A0
+output buzz on D0
+
+
+every 5s {
+    read temp -> t
+    if (t > 30) {
+        sleep 1s
+    }
+}
+
+
+every 10s {
+    while (true) {
+        sleep 1s
+    }
+}
+
+
+every 10s {
+    for i in [1, 2, 3] {
+        sleep 500ms
+    }
+}
+
+
+every 10s {
+    while (true) {
+        for i in [1, 2, 3] {
+            sleep 100ms
+        }
+    }
+}

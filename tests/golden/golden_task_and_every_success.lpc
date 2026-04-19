@@ -1,0 +1,10 @@
+
+sensor temp on A0
+
+task {
+    boot = 1
+}
+
+every 1s {
+    read temp -> t
+}

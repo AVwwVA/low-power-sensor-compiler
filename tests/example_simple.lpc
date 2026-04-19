@@ -1,0 +1,9 @@
+
+sensor temp on A0
+extern Serial::println(x : string) -> void
+
+every 5s {
+    read temp -> t
+    Serial::println("Temperature: " + t)
+}
+

@@ -1,0 +1,54 @@
+# Rust build output
+/target/
+
+# Local generated compiler output
+/out.c
+/arm.c
+/avr.c
+
+# Local scratch fixtures
+/tests/example.lpc
+/tests/arm_piska.lpc
+
+# Removed local documentation and legacy expected snapshots
+/docs/
+/tests/expected/
+
+# Generated test output snapshots that are not part of the active harness
+/tests/*_out.c
+/tests/*_out_*.c
+/tests/Scheduler_tests/output*.c
+
+# Editors and IDEs
+/.idea/
+/.vscode/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# LaTeX build artifacts, in case thesis files are built inside this repo
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.idx
+*.ilg
+*.ind
+*.lof
+*.log
+*.lot
+*.out
+*.run.xml
+*.synctex.gz
+*.toc

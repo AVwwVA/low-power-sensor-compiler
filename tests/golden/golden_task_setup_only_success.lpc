@@ -1,0 +1,7 @@
+
+sensor temp on A0
+
+task {
+    read temp -> once
+    sleep 10ms
+}

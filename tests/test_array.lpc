@@ -1,0 +1,6 @@
+sensor temp on A0
+
+every 5s {
+    read temp -> t
+    arr = [1, 2, 3]
+}
