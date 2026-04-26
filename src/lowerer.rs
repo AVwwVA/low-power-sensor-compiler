@@ -895,13 +895,12 @@ fn validate_stmt(stmt: &IrStmt) -> IrResult<()> {
         IrStmt::Sleep {
             duration_micros, ..
         } => {
-            if matches!(duration_micros, Some(v) if *v < 0) {
-                Err(IrError::InvalidTaskPeriod {
-                    period_micros: duration_micros.unwrap_or_default(),
+            match duration_micros {
+                Some(v) if *v > 0 => Ok(()),
+                _ => Err(IrError::InvalidSleepDuration {
+                    duration_micros: *duration_micros,
                     source_span,
-                })
-            } else {
-                Ok(())
+                }),
             }
         }
         IrStmt::PeriodicBlock { body, .. } => {
@@ -947,6 +946,9 @@ fn validate_stmt(stmt: &IrStmt) -> IrResult<()> {
                     name: variable.clone(),
                     source_span,
                 });
+            }
+            if !matches!((&iterable.kind, &iterable.ty), (IrExprKind::Array(_), IrType::Array(_))) {
+                return Err(IrError::UnsupportedForIterable { source_span });
             }
             validate_expr(iterable)?;
             for s in body {
@@ -1057,6 +1059,8 @@ fn validate_expr(expr: &IrExpr) -> IrResult<()> {
                     | (IrType::String, IrType::Float)
                     | (IrType::String, IrType::Bool)
                     | (IrType::String, IrType::String)
+                    | (IrType::Unit(_), IrType::Int)
+                    | (IrType::Unit(_), IrType::Float)
             );
             if cast_allowed {
                 Ok(())
@@ -1088,6 +1092,7 @@ mod tests {
     use super::*;
     use crate::lexer::Lexer;
     use crate::parser::{program_parser, token_stream};
+    use crate::task_ir::{EnergyPolicy, SchedulerConfig, SleepFallback, TaskTrigger};
     use crate::typechecker::TypeChecker;
     use chumsky::Parser;
 
@@ -1489,5 +1494,154 @@ mod tests {
         assert!(ir.tasks.is_empty());
         assert!(!ir.setup_body.is_empty());
         validate_program(&ir).expect("task-only program should validate");
+    }
+
+    #[test]
+    fn lr_validate_program_rejects_missing_sleep_duration_payload() {
+        let program = IrProgram {
+            definitions: vec![],
+            tasks: vec![IrTask {
+                name: None,
+                trigger: TaskTrigger::Periodic {
+                    period_ticks: 1,
+                    phase_ticks: 0,
+                },
+                body: vec![IrStmt::Sleep {
+                    duration_micros: None,
+                    mode_hint: None,
+                    wake_sources: vec![],
+                    fallback: SleepFallback::UseActiveDelay,
+                    source_span: None,
+                }],
+                source_span: None,
+            }],
+            setup_body: vec![],
+            functions: vec![],
+            scheduler: SchedulerConfig::default(),
+            energy_policy: EnergyPolicy::default(),
+        };
+
+        let err = validate_program(&program).expect_err("validation should fail");
+        match err {
+            IrError::InvalidSleepDuration {
+                duration_micros: None,
+                ..
+            } => {}
+            other => panic!("expected InvalidSleepDuration(None), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn lr_validate_program_rejects_zero_sleep_duration_payload() {
+        let program = IrProgram {
+            definitions: vec![],
+            tasks: vec![IrTask {
+                name: None,
+                trigger: TaskTrigger::Periodic {
+                    period_ticks: 1,
+                    phase_ticks: 0,
+                },
+                body: vec![IrStmt::Sleep {
+                    duration_micros: Some(0),
+                    mode_hint: None,
+                    wake_sources: vec![],
+                    fallback: SleepFallback::UseActiveDelay,
+                    source_span: None,
+                }],
+                source_span: None,
+            }],
+            setup_body: vec![],
+            functions: vec![],
+            scheduler: SchedulerConfig::default(),
+            energy_policy: EnergyPolicy::default(),
+        };
+
+        let err = validate_program(&program).expect_err("validation should fail");
+        match err {
+            IrError::InvalidSleepDuration {
+                duration_micros: Some(0),
+                ..
+            } => {}
+            other => panic!("expected InvalidSleepDuration(Some(0)), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn lr_validate_program_rejects_non_array_for_iterable() {
+        let program = IrProgram {
+            definitions: vec![],
+            tasks: vec![IrTask {
+                name: None,
+                trigger: TaskTrigger::Periodic {
+                    period_ticks: 1,
+                    phase_ticks: 0,
+                },
+                body: vec![IrStmt::For {
+                    variable: "i".to_string(),
+                    iterable: IrExpr {
+                        kind: IrExprKind::Ident("xs".to_string()),
+                        ty: IrType::Array(Box::new(IrType::Int)),
+                        unit: None,
+                        source_span: None,
+                    },
+                    body: vec![],
+                    source_span: None,
+                }],
+                source_span: None,
+            }],
+            setup_body: vec![],
+            functions: vec![],
+            scheduler: SchedulerConfig::default(),
+            energy_policy: EnergyPolicy::default(),
+        };
+
+        let err = validate_program(&program).expect_err("validation should fail");
+        match err {
+            IrError::UnsupportedForIterable { .. } => {}
+            other => panic!("expected UnsupportedForIterable, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn lr_validate_program_accepts_explicit_unit_to_float_cast() {
+        let program = IrProgram {
+            definitions: vec![],
+            tasks: vec![IrTask {
+                name: None,
+                trigger: TaskTrigger::Periodic {
+                    period_ticks: 1,
+                    phase_ticks: 0,
+                },
+                body: vec![IrStmt::Assign {
+                    variable: "temper".to_string(),
+                    value: IrExpr {
+                        kind: IrExprKind::Cast {
+                            expr: Box::new(IrExpr {
+                                kind: IrExprKind::UnitLit {
+                                    value: Number::Float(25.0),
+                                    unit: "c".to_string(),
+                                    category: UnitCategory::Temperature,
+                                },
+                                ty: IrType::Unit(UnitCategory::Temperature),
+                                unit: Some(UnitCategory::Temperature),
+                                source_span: None,
+                            }),
+                            target: IrType::Float,
+                        },
+                        ty: IrType::Float,
+                        unit: None,
+                        source_span: None,
+                    },
+                    source_span: None,
+                }],
+                source_span: None,
+            }],
+            setup_body: vec![],
+            functions: vec![],
+            scheduler: SchedulerConfig::default(),
+            energy_policy: EnergyPolicy::default(),
+        };
+
+        validate_program(&program).expect("explicit unit-to-float cast should validate");
     }
 }

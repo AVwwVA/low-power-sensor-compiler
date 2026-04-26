@@ -1,4 +1,4 @@
 arch = "avr"
 clock_hz = 16000000
-c_includes = []
+c_includes = ["<Arduino.h>", "<stdint.h>", "<math.h>"]
 c_prelude = []

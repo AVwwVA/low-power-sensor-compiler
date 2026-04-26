@@ -2,10 +2,45 @@ use crate::codegen::utils::{
     format_autocast_helpers, format_includes, format_prelude, format_program_metadata,
     generate_function, generate_setup_body, generate_task, task_symbol,
 };
+use crate::codegen::{first_periodic_task_span, CodegenError, CodegenResult};
 use crate::config::CompilerConfig;
 use crate::task_ir::{IrDefinition, IrProgram, TaskTrigger};
 
-pub fn generate(program: &IrProgram, config: &CompilerConfig) -> String {
+fn validate_scheduler_tick(program: &IrProgram) -> CodegenResult<u32> {
+    let tick_micros = program.scheduler.tick_micros;
+    let source_span = first_periodic_task_span(program);
+
+    if tick_micros < 1000 {
+        return Err(CodegenError::invalid_scheduler_config(
+            format!(
+                "ARM scheduler tick must be at least 1000 microseconds, got {}",
+                tick_micros
+            ),
+            source_span,
+        ));
+    }
+    if !tick_micros.is_multiple_of(1000) {
+        return Err(CodegenError::invalid_scheduler_config(
+            format!(
+                "ARM scheduler tick must be an exact multiple of 1000 microseconds, got {}",
+                tick_micros
+            ),
+            source_span,
+        ));
+    }
+
+    let sched_tick_ms = tick_micros / 1000;
+    if sched_tick_ms == 0 {
+        return Err(CodegenError::invalid_scheduler_config(
+            "ARM scheduler tick cannot be reduced to 0 milliseconds".to_string(),
+            source_span,
+        ));
+    }
+
+    Ok(sched_tick_ms)
+}
+
+pub fn generate(program: &IrProgram, config: &CompilerConfig) -> CodegenResult<String> {
     let mut code = String::new();
 
     code.push_str(&format_includes(
@@ -71,7 +106,7 @@ static inline void __lpc_low_power_sleep_micros(uint64_t duration_us) {
     ));
 
     if task_count > 0 {
-        let sched_tick_ms = program.scheduler.tick_micros / 1000;
+        let sched_tick_ms = validate_scheduler_tick(program)?;
         code.push_str(&format!(
             "static const uint16_t SCHED_TICK_MS = {};\n\n",
             sched_tick_ms
@@ -107,11 +142,11 @@ static inline void __lpc_low_power_sleep_micros(uint64_t duration_us) {
     code.push('\n');
 
     for func in &program.functions {
-        code.push_str(&generate_function(func));
+        code.push_str(&generate_function(func)?);
     }
 
     for (i, task) in program.tasks.iter().enumerate() {
-        code.push_str(&generate_task(i, task));
+        code.push_str(&generate_task(i, task)?);
     }
 
     if task_count > 0 {
@@ -161,7 +196,7 @@ static inline void scheduler_process_elapsed_ticks(uint32_t elapsed_ms) {
 
     if !program.setup_body.is_empty() {
         code.push('\n');
-        code.push_str(&generate_setup_body(&program.setup_body, "    "));
+        code.push_str(&generate_setup_body(&program.setup_body, "    ")?);
     }
 
     code.push_str("}\n\n");
@@ -173,7 +208,7 @@ static inline void scheduler_process_elapsed_ticks(uint32_t elapsed_ms) {
 }
 "#,
         );
-        return code;
+        return Ok(code);
     }
 
     code.push_str(
@@ -228,5 +263,5 @@ static inline void scheduler_process_elapsed_ticks(uint32_t elapsed_ms) {
 "#,
     );
 
-    code
+    Ok(code)
 }

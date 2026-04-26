@@ -1,6 +1,7 @@
 use crate::ast::*;
 use crate::lexer::SpannedToken;
 use crate::lexer::tokens::Token;
+use crate::types::Type;
 use chumsky::error::Rich;
 use chumsky::input::{Stream, ValueInput};
 use chumsky::pratt::{infix, left, prefix, right};
@@ -158,6 +159,30 @@ where
     })
 }
 
+fn explicit_cast_target<'a, I>() -> impl Parser<'a, I, Type, ParseExtra<'a>> + Clone
+where
+    I: ValueInput<'a, Token = Token, Span = SimpleSpan<usize>>,
+{
+    choice((
+        just(Token::Identifier("int".to_string())).to(Type::Int),
+        just(Token::Identifier("i8".to_string())).to(Type::Int),
+        just(Token::Identifier("i16".to_string())).to(Type::Int),
+        just(Token::Identifier("i32".to_string())).to(Type::Int),
+        just(Token::Identifier("i64".to_string())).to(Type::Int),
+        just(Token::Identifier("u8".to_string())).to(Type::Int),
+        just(Token::Identifier("u16".to_string())).to(Type::Int),
+        just(Token::Identifier("u32".to_string())).to(Type::Int),
+        just(Token::Identifier("u64".to_string())).to(Type::Int),
+        just(Token::Identifier("float".to_string())).to(Type::Float),
+        just(Token::Identifier("f32".to_string())).to(Type::Float),
+        just(Token::Identifier("f64".to_string())).to(Type::Float),
+        just(Token::Identifier("bool".to_string())).to(Type::Bool),
+        just(Token::Identifier("string".to_string())).to(Type::String),
+        just(Token::Identifier("str".to_string())).to(Type::String),
+    ))
+    .delimited_by(just(Token::LParen), just(Token::RParen))
+}
+
 fn expr<'a, I>() -> impl Parser<'a, I, Expr, ParseExtra<'a>> + Clone
 where
     I: ValueInput<'a, Token = Token, Span = SimpleSpan<usize>>,
@@ -237,6 +262,12 @@ where
         }
 
         spanned_expr(atom.pratt((
+            prefix(8, explicit_cast_target(), |target, rhs, _| {
+                Expr::new(ExprKind::Cast {
+                    expr: Box::new(rhs),
+                    target,
+                })
+            }),
             prefix(8, just(Token::Minus), |_, rhs, _| {
                 Expr::new(ExprKind::UnaryOp {
                     op: UnOp::Neg,
@@ -1124,6 +1155,24 @@ mod tests {
                 Statement::Assignment { value, .. } => match &value.kind {
                     ExprKind::BinaryOp { op: BinOp::Mul, .. } => (),
                     _ => panic!("Expected Mul as root"),
+                },
+                _ => panic!("Expected assignment"),
+            },
+            _ => panic!("Expected every block"),
+        }
+    }
+
+    #[test]
+    fn test_explicit_cast_expr() {
+        let result = parse("every 1s { x = (int)42ms }").unwrap();
+        match &result.statements[0] {
+            TopLevel::Every(e) => match &e.body[0] {
+                Statement::Assignment { value, .. } => match &value.kind {
+                    ExprKind::Cast { expr, target } => {
+                        assert_eq!(target, &crate::types::Type::Int);
+                        assert!(matches!(expr.kind, ExprKind::UnitLit { .. }));
+                    }
+                    _ => panic!("Expected explicit cast expression"),
                 },
                 _ => panic!("Expected assignment"),
             },

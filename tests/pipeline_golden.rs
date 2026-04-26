@@ -319,6 +319,94 @@ fn run_host_and_optional_c11_smoke(
     host_output
 }
 
+fn prepare_runtime_include_dir(base_dir: &Path) -> PathBuf {
+    let include_dir = prepare_c_smoke_include_dir(base_dir, &[]);
+    write_text(
+        &include_dir.join("Arduino.h"),
+        r#"#pragma once
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+
+#ifndef INPUT
+#define INPUT 0
+#endif
+#ifndef OUTPUT
+#define OUTPUT 1
+#endif
+#ifndef A0
+#define A0 0
+#endif
+#ifndef D0
+#define D0 0
+#endif
+
+typedef struct {
+    void (*begin)(int);
+    void (*print)(const char*);
+    void (*println)(const char*);
+} __lpc_serial_t;
+
+static inline void __lpc_serial_begin_impl(int baud) { (void)baud; }
+static inline void __lpc_serial_print_impl(const char* msg) { fputs(msg == NULL ? "" : msg, stdout); }
+static inline void __lpc_serial_println_impl(const char* msg) { puts(msg == NULL ? "" : msg); }
+
+static const __lpc_serial_t Serial = {
+    __lpc_serial_begin_impl,
+    __lpc_serial_print_impl,
+    __lpc_serial_println_impl
+};
+
+static inline int analogRead(int pin) { (void)pin; return 0; }
+static inline void analogWrite(int pin, int value) { (void)pin; (void)value; }
+static inline void pinMode(int pin, int mode) { (void)pin; (void)mode; }
+static inline void delay(unsigned long ms) { (void)ms; }
+static inline void delayMicroseconds(unsigned int us) { (void)us; }
+static inline uint32_t millis(void) { return 0u; }
+static inline void noInterrupts(void) {}
+static inline void interrupts(void) {}
+"#,
+    );
+    include_dir
+}
+
+fn compile_and_run_runtime_task(
+    test_name: &str,
+    generated_code: &Path,
+    task_symbol: &str,
+) -> Output {
+    let runtime_dir = make_temp_dir(&format!("{}_runtime", test_name));
+    let include_dir = prepare_runtime_include_dir(&runtime_dir);
+    let runner_path = runtime_dir.join("runner.c");
+    let binary_path = runtime_dir.join("runtime.out");
+    write_text(
+        &runner_path,
+        &format!(
+            "void {task_symbol}(void);\nint main(void) {{\n    {task_symbol}();\n    return 0;\n}}\n"
+        ),
+    );
+
+    let compile = Command::new("gcc")
+        .arg("-std=c11")
+        .arg("-I")
+        .arg(&include_dir)
+        .arg(generated_code)
+        .arg(&runner_path)
+        .arg("-o")
+        .arg(&binary_path)
+        .output()
+        .expect("failed to compile runtime harness");
+    assert!(
+        compile.status.success(),
+        "runtime gcc compile failed:\n{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+
+    Command::new(&binary_path)
+        .output()
+        .expect("failed to run runtime harness")
+}
+
 #[test]
 fn golden_typed_temp_read_success() {
     let run = run_fixture(
@@ -639,6 +727,34 @@ fn golden_avr_c11_compile_smoke_success() {
 }
 
 #[test]
+fn golden_avr_scheduler_validation_failure_reports_codegen_error_with_span() {
+    let invalid_avr_config = r#"
+arch = "avr"
+clock_hz = 14745600
+c_includes = ["<Arduino.h>"]
+"#;
+    let run = run_fixture_with_config(
+        "avr_scheduler_validation_failure",
+        "golden_typed_temp_read_success.lpc",
+        invalid_avr_config,
+    );
+    assert!(
+        !run.status.success(),
+        "expected backend validation failure, stdout:\n{}",
+        run.stdout
+    );
+    assert!(run.stderr.contains("codegen error"));
+    assert!(run
+        .stderr
+        .contains("cannot be represented exactly with available Timer2 prescalers"));
+    assert!(
+        has_location_marker(&run.stderr),
+        "expected location marker in stderr:\n{}",
+        run.stderr
+    );
+}
+
+#[test]
 fn golden_config_passthrough_valid_is_preserved_and_compiles() {
     let config = r##"
 arch = "arm"
@@ -709,10 +825,10 @@ fn assert_runtime_cast_helper_paths(code: &str) {
         "__lpc_to_int_from_string(",
         "__lpc_to_float_from_string(",
         "__lpc_to_bool_from_string(",
-        "__lpc_to_string_from_int(",
-        "__lpc_to_string_from_float(",
-        "__lpc_to_string_from_bool(",
-        "__lpc_concat_strings(",
+        "__lpc_format_int_to_buffer(",
+        "__lpc_format_float_to_buffer(",
+        "__lpc_format_bool_to_buffer(",
+        "__lpc_append_cstr(",
     ] {
         assert!(
             code.contains(helper_call),
@@ -779,5 +895,38 @@ fn runtime_cast_matrix_avr_compile_smoke_and_helper_paths() {
         smoke.status.success(),
         "host gcc C11 smoke failed:\n{}",
         String::from_utf8_lossy(&smoke.stderr)
+    );
+}
+
+#[test]
+fn runtime_cast_matrix_arm_runtime_concat_chain_preserves_order() {
+    let run = run_source_with_config(
+        "runtime_cast_matrix_arm_runtime",
+        "runtime_cast_matrix.lpc",
+        ARM_TEST_CONFIG,
+    );
+    assert!(run.status.success(), "stderr:\n{}", run.stderr);
+
+    let output = compile_and_run_runtime_task(
+        "runtime_cast_matrix_arm_runtime",
+        &run.out_path,
+        "task_0",
+    );
+    assert!(
+        output.status.success(),
+        "runtime harness failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("CAST|concat_mix|A=7,B=2.5,C=true"),
+        "expected concat output order to be preserved, stdout:\n{}",
+        stdout
+    );
+    assert!(
+        !stdout.contains('?'),
+        "unexpected placeholder character in runtime output:\n{}",
+        stdout
     );
 }

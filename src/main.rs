@@ -67,18 +67,33 @@ fn main() {
                             match lower_program(&program) {
                                 Ok(task_ir) => match validate_program(&task_ir) {
                                     Ok(()) => {
-                                        let c_code = codegen::generate_c_code(&task_ir, &config);
-                                        if let Err(e) = std::fs::write(&args.out, c_code) {
-                                            eprintln!(
-                                                "Failed to write output file '{}': {}",
-                                                args.out, e
-                                            );
-                                            std::process::exit(1);
-                                        } else {
-                                            println!(
-                                                "Successfully wrote generated C code to {}",
-                                                args.out
-                                            );
+                                        match codegen::generate_c_code(&task_ir, &config) {
+                                            Ok(c_code) => {
+                                                if let Err(e) = std::fs::write(&args.out, c_code) {
+                                                    eprintln!(
+                                                        "Failed to write output file '{}': {}",
+                                                        args.out, e
+                                                    );
+                                                    std::process::exit(1);
+                                                } else {
+                                                    println!(
+                                                        "Successfully wrote generated C code to {}",
+                                                        args.out
+                                                    );
+                                                }
+                                            }
+                                            Err(err) => {
+                                                eprintln!(
+                                                    "{}",
+                                                    source_file.format_diagnostic(
+                                                        "codegen error",
+                                                        &err.to_string(),
+                                                        err.source_span(),
+                                                        None,
+                                                    )
+                                                );
+                                                std::process::exit(1);
+                                            }
                                         }
                                     }
                                     Err(err) => {

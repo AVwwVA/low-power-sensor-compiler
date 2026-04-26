@@ -1,9 +1,16 @@
+extern log(x : float) -> float
 
-sensor temp on A0
+fn convert_temp(raw: int) -> float {
+    return (1 / (log(1 / (1023.0 / raw - 1)) / 3950 + 1.0 / 298.15) - 273.15)
+}
+
+sensor temp on A0 : temperature using convert_temp
 extern Serial::println(x : string) -> void
+
 
 every 5s {
     read temp -> t
-    Serial::println("Temperature: " + t)
+    temper = (float)t
+    Serial::println("Temperature: " + temper + "C")
 }
 

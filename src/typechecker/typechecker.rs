@@ -782,6 +782,14 @@ impl TypeChecker {
         Self::is_autocast_primitive(from) && Self::is_autocast_primitive(to)
     }
 
+    fn can_explicit_cast(from: &Type, to: &Type) -> bool {
+        if Self::can_autocast(from, to) {
+            return true;
+        }
+
+        matches!((from, to), (Type::Unit(_), Type::Int | Type::Float))
+    }
+
     fn is_codegen_safe_for_iterable(expr: &Expr) -> bool {
         match &expr.kind {
             ExprKind::RangeArray { .. } | ExprKind::Array(_) => true,
@@ -1934,11 +1942,11 @@ impl TypeChecker {
                 target,
             } => {
                 let inner_ty = self.check_expr(inner);
-                if Self::can_autocast(&inner_ty, target) {
+                if Self::can_explicit_cast(&inner_ty, target) {
                     target.clone()
                 } else {
                     self.errors.push(TypeError::at(
-                        format!("Cannot auto-cast from {} to {}", inner_ty, target),
+                        format!("Cannot cast from {} to {}", inner_ty, target),
                         inner.span.or(expr_span),
                     ));
                     Type::Unknown
@@ -3037,6 +3045,34 @@ mod tests {
             e.message
                 .contains("Arithmetic operation requires numeric or unit types")
         }));
+    }
+
+    #[test]
+    fn test_explicit_cast_unit_to_int_and_float_is_allowed() {
+        let input = r#"
+            every 1s {
+                t = 42ms
+                as_int = (int)t
+                as_float = (float)t
+            }
+        "#;
+        assert!(parse_and_check(input).is_ok());
+    }
+
+    #[test]
+    fn test_explicit_cast_unit_to_string_is_rejected() {
+        let input = r#"
+            extern Serial::println(msg: string) -> void
+            every 1s {
+                t = 42ms
+                Serial::println((string)t)
+            }
+        "#;
+        let errs = parse_and_check_errors(input);
+        assert!(
+            errs.iter()
+                .any(|e| e.message.contains("Cannot cast from time to string"))
+        );
     }
 
     #[test]

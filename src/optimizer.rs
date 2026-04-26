@@ -77,35 +77,33 @@ impl ConstantFolder {
                             unit: None,
                             span: stmt_span,
                         });
-                    } else {
-                        if let Some(else_stmts) = else_body {
-                            for s in else_stmts {
-                                self.fold_statement(s);
-                            }
-                            *stmt = Statement::Expr(Expr {
-                                kind: ExprKind::Paren(Box::new(Expr {
-                                    kind: ExprKind::BoolLit(true),
-                                    ty: Some(Type::Bool),
-                                    unit: None,
-                                    span: stmt_span,
-                                })),
-                                ty: Some(Type::Bool),
-                                unit: None,
-                                span: stmt_span,
-                            });
-                        } else {
-                            *stmt = Statement::Expr(Expr {
-                                kind: ExprKind::Paren(Box::new(Expr {
-                                    kind: ExprKind::BoolLit(true),
-                                    ty: Some(Type::Bool),
-                                    unit: None,
-                                    span: stmt_span,
-                                })),
-                                ty: Some(Type::Bool),
-                                unit: None,
-                                span: stmt_span,
-                            });
+                    } else if let Some(else_stmts) = else_body {
+                        for s in else_stmts {
+                            self.fold_statement(s);
                         }
+                        *stmt = Statement::Expr(Expr {
+                            kind: ExprKind::Paren(Box::new(Expr {
+                                kind: ExprKind::BoolLit(true),
+                                ty: Some(Type::Bool),
+                                unit: None,
+                                span: stmt_span,
+                            })),
+                            ty: Some(Type::Bool),
+                            unit: None,
+                            span: stmt_span,
+                        });
+                    } else {
+                        *stmt = Statement::Expr(Expr {
+                            kind: ExprKind::Paren(Box::new(Expr {
+                                kind: ExprKind::BoolLit(true),
+                                ty: Some(Type::Bool),
+                                unit: None,
+                                span: stmt_span,
+                            })),
+                            ty: Some(Type::Bool),
+                            unit: None,
+                            span: stmt_span,
+                        });
                     }
                 } else {
                     for s in then_body {

@@ -2,10 +2,71 @@ use crate::codegen::utils::{
     format_autocast_helpers, format_includes, format_prelude, format_program_metadata,
     generate_function, generate_setup_body, generate_task, task_symbol,
 };
+use crate::codegen::{first_periodic_task_span, CodegenError, CodegenResult};
 use crate::config::CompilerConfig;
 use crate::task_ir::{IrDefinition, IrProgram, TaskTrigger};
 
-pub fn generate(program: &IrProgram, config: &CompilerConfig) -> String {
+struct Timer2Selection {
+    ocr2a: u16,
+    tccr2b_bits: &'static str,
+}
+
+fn select_timer2_config(
+    program: &IrProgram,
+    config: &CompilerConfig,
+) -> CodegenResult<Timer2Selection> {
+    const TIMER2_PRESCALERS: &[(u64, &str)] = &[
+        (1, "(1 << CS20)"),
+        (8, "(1 << CS21)"),
+        (32, "(1 << CS21) | (1 << CS20)"),
+        (64, "(1 << CS22)"),
+        (128, "(1 << CS22) | (1 << CS20)"),
+        (256, "(1 << CS22) | (1 << CS21)"),
+        (1024, "(1 << CS22) | (1 << CS21) | (1 << CS20)"),
+    ];
+
+    let tick_micros = program.scheduler.tick_micros as u64;
+    let clock_hz = config.clock_hz as u64;
+    let numerator = tick_micros * clock_hz;
+    let source_span = first_periodic_task_span(program);
+    let mut exact_division_seen = false;
+
+    for &(prescaler, tccr2b_bits) in TIMER2_PRESCALERS {
+        let denominator = prescaler * 1_000_000u64;
+        if !numerator.is_multiple_of(denominator) {
+            continue;
+        }
+
+        exact_division_seen = true;
+        let cycles_per_tick = numerator / denominator;
+        if (1..=256).contains(&cycles_per_tick) {
+            return Ok(Timer2Selection {
+                ocr2a: (cycles_per_tick - 1u64) as u16,
+                tccr2b_bits,
+            });
+        }
+    }
+
+    if !exact_division_seen {
+        return Err(CodegenError::invalid_scheduler_config(
+            format!(
+                "AVR scheduler tick {}us at {}Hz cannot be represented exactly with available Timer2 prescalers",
+                tick_micros, clock_hz
+            ),
+            source_span,
+        ));
+    }
+
+    Err(CodegenError::invalid_scheduler_config(
+        format!(
+            "AVR scheduler tick {}us at {}Hz produces Timer2 compare value outside 0..=255 for all exact prescaler choices",
+            tick_micros, clock_hz
+        ),
+        source_span,
+    ))
+}
+
+pub fn generate(program: &IrProgram, config: &CompilerConfig) -> CodegenResult<String> {
     let mut code = String::new();
 
     code.push_str(&format_includes(
@@ -101,11 +162,11 @@ static inline void __lpc_low_power_sleep_micros(uint64_t duration_us) {
     code.push('\n');
 
     for func in &program.functions {
-        code.push_str(&generate_function(func));
+        code.push_str(&generate_function(func)?);
     }
 
     for (i, task) in program.tasks.iter().enumerate() {
-        code.push_str(&generate_task(i, task));
+        code.push_str(&generate_task(i, task)?);
     }
 
     if task_count > 0 {
@@ -144,14 +205,11 @@ ISR(TIMER2_COMPA_vect) {
 
     if !program.setup_body.is_empty() {
         code.push('\n');
-        code.push_str(&generate_setup_body(&program.setup_body, "    "));
+        code.push_str(&generate_setup_body(&program.setup_body, "    ")?);
     }
 
     if task_count > 0 {
-        let tick_micros = program.scheduler.tick_micros as u64;
-        let clock_hz = config.clock_hz as u64;
-        let prescaler = 1024;
-        let ocr2a = (tick_micros * clock_hz) / (prescaler * 1_000_000) - 1;
+        let timer2 = select_timer2_config(program, config)?;
 
         code.push_str(&format!(
             r#"
@@ -161,13 +219,13 @@ ISR(TIMER2_COMPA_vect) {
     ADCSRA = (uint8_t)((1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0));
 
     TCCR2A = (1 << WGM21);
-    TCCR2B = (1 << CS22) | (1 << CS21) | (1 << CS20);
+    TCCR2B = {};
     OCR2A = {};
     TIMSK2 = (1 << OCIE2A);
 
     sei();
 "#,
-            ocr2a
+            timer2.tccr2b_bits, timer2.ocr2a
         ));
     }
 
@@ -180,7 +238,7 @@ ISR(TIMER2_COMPA_vect) {
 }
 "#,
         );
-        return code;
+        return Ok(code);
     }
 
     code.push_str(
@@ -221,5 +279,5 @@ ISR(TIMER2_COMPA_vect) {
 "#,
     );
 
-    code
+    Ok(code)
 }

@@ -319,6 +319,10 @@ pub enum IrError {
     SleepOutsidePeriodicBlock {
         source_span: Option<SourceSpan>,
     },
+    InvalidSleepDuration {
+        duration_micros: Option<i64>,
+        source_span: Option<SourceSpan>,
+    },
     TypeMismatch {
         expected: IrType,
         found: IrType,
@@ -339,6 +343,9 @@ pub enum IrError {
         name: String,
         source_span: Option<SourceSpan>,
     },
+    UnsupportedForIterable {
+        source_span: Option<SourceSpan>,
+    },
     NoTasksDefined,
 }
 
@@ -353,6 +360,16 @@ impl std::fmt::Display for IrError {
                     f,
                     "Sleep is only allowed inside periodic or task blocks (at {:?})",
                     source_span
+                )
+            }
+            IrError::InvalidSleepDuration {
+                duration_micros,
+                source_span,
+            } => {
+                write!(
+                    f,
+                    "Invalid sleep duration: {:?} microseconds (at {:?})",
+                    duration_micros, source_span
                 )
             }
             IrError::TypeMismatch {
@@ -385,6 +402,13 @@ impl std::fmt::Display for IrError {
             IrError::UnknownSensor { name, source_span } => {
                 write!(f, "Unknown sensor: {} (at {:?})", name, source_span)
             }
+            IrError::UnsupportedForIterable { source_span } => {
+                write!(
+                    f,
+                    "For-loops must iterate over lowered arrays (at {:?})",
+                    source_span
+                )
+            }
             IrError::NoTasksDefined => {
                 write!(f, "No executable blocks defined in the program")
             }
@@ -397,10 +421,12 @@ impl IrError {
         match self {
             IrError::SleepInForbiddenContext { source_span }
             | IrError::SleepOutsidePeriodicBlock { source_span }
+            | IrError::InvalidSleepDuration { source_span, .. }
             | IrError::InvalidTaskPeriod { source_span, .. }
             | IrError::DivisionByZero { source_span }
             | IrError::UnknownVariable { source_span, .. }
-            | IrError::UnknownSensor { source_span, .. } => *source_span,
+            | IrError::UnknownSensor { source_span, .. }
+            | IrError::UnsupportedForIterable { source_span } => *source_span,
             IrError::TypeMismatch { source_span, .. } => *source_span,
             IrError::NoTasksDefined => None,
         }
@@ -416,6 +442,13 @@ impl IrError {
                     source_span: source_span.or(fallback_span),
                 }
             }
+            IrError::InvalidSleepDuration {
+                duration_micros,
+                source_span,
+            } => IrError::InvalidSleepDuration {
+                duration_micros,
+                source_span: source_span.or(fallback_span),
+            },
             IrError::TypeMismatch {
                 expected,
                 found,
@@ -441,6 +474,9 @@ impl IrError {
             },
             IrError::UnknownSensor { name, source_span } => IrError::UnknownSensor {
                 name,
+                source_span: source_span.or(fallback_span),
+            },
+            IrError::UnsupportedForIterable { source_span } => IrError::UnsupportedForIterable {
                 source_span: source_span.or(fallback_span),
             },
             IrError::NoTasksDefined => IrError::NoTasksDefined,
