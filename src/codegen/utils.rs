@@ -1554,7 +1554,7 @@ mod tests {
                 phase_ticks: 0,
             },
             body: vec![IrStmt::Write {
-                output: "buzz".to_string(),
+                output: "D0".to_string(),
                 value: IrExpr {
                     kind: IrExprKind::IntLit(255),
                     ty: IrType::Int,
@@ -1567,7 +1567,7 @@ mod tests {
         };
 
         let code = generate_task(0, &task).expect("task codegen should succeed");
-        assert!(code.contains("analogWrite(buzz, 255);"));
+        assert!(code.contains("analogWrite(D0, 255);"));
     }
 
     #[test]
@@ -2050,7 +2050,7 @@ mod tests {
             },
             body: vec![IrStmt::PeriodicBlock {
                 body: vec![IrStmt::Read {
-                    sensor: "temp".to_string(),
+                    sensor: "A0".to_string(),
                     variable: "t".to_string(),
                     value_type: IrType::Unit(crate::types::UnitCategory::Temperature),
                     converter: Some(vec!["Sensor".to_string(), "convert".to_string()]),
@@ -2062,7 +2062,7 @@ mod tests {
         };
 
         let code = generate_task(0, &task).expect("task codegen should succeed");
-        assert!(code.contains("float t = Sensor.convert(analogRead(temp));"));
+        assert!(code.contains("float t = Sensor.convert(analogRead(A0));"));
     }
 
     #[test]
@@ -2075,7 +2075,7 @@ mod tests {
             },
             body: vec![IrStmt::PeriodicBlock {
                 body: vec![IrStmt::Read {
-                    sensor: "tick_sensor".to_string(),
+                    sensor: "A1".to_string(),
                     variable: "t".to_string(),
                     value_type: IrType::Unit(crate::types::UnitCategory::Time),
                     converter: Some(vec!["Clock".to_string(), "convertTick".to_string()]),
@@ -2087,7 +2087,7 @@ mod tests {
         };
 
         let code = generate_task(0, &task).expect("task codegen should succeed");
-        assert!(code.contains("int t = Clock.convertTick(analogRead(tick_sensor));"));
+        assert!(code.contains("int t = Clock.convertTick(analogRead(A1));"));
     }
 
     #[test]
@@ -2100,7 +2100,7 @@ mod tests {
             },
             body: vec![IrStmt::PeriodicBlock {
                 body: vec![IrStmt::Read {
-                    sensor: "temp".to_string(),
+                    sensor: "A0".to_string(),
                     variable: "t".to_string(),
                     value_type: IrType::Unit(crate::types::UnitCategory::Temperature),
                     converter: Some(vec![
@@ -2116,6 +2116,6 @@ mod tests {
         };
 
         let code = generate_task(0, &task).expect("task codegen should succeed");
-        assert!(code.contains("float t = Vendor.Sensors.convert(analogRead(temp));"));
+        assert!(code.contains("float t = Vendor.Sensors.convert(analogRead(A0));"));
     }
 }

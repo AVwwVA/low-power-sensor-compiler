@@ -498,7 +498,8 @@ pub enum IrBlockKind {
 #[derive(Debug, Clone, Default)]
 pub struct IrLoweringContext {
     pub sensors: std::collections::HashMap<String, IrSensorReadInfo>,
-    pub outputs: std::collections::HashSet<String>,
+    pub sensor_pins: std::collections::HashMap<String, String>,
+    pub outputs: std::collections::HashMap<String, String>,
     pub variables: std::collections::HashSet<String>,
     pub block_stack: Vec<IrBlockKind>,
     pub unit_registry: crate::types::UnitRegistry,
@@ -514,17 +515,25 @@ impl IrLoweringContext {
     pub fn new() -> Self {
         Self {
             sensors: std::collections::HashMap::new(),
-            outputs: std::collections::HashSet::new(),
+            sensor_pins: std::collections::HashMap::new(),
+            outputs: std::collections::HashMap::new(),
             variables: std::collections::HashSet::new(),
             block_stack: Vec::new(),
             unit_registry: crate::types::UnitRegistry::new(),
         }
     }
-    pub fn add_sensor(&mut self, name: impl Into<String>, read_info: IrSensorReadInfo) {
-        self.sensors.insert(name.into(), read_info);
+    pub fn add_sensor(
+        &mut self,
+        name: impl Into<String>,
+        pin: impl Into<String>,
+        read_info: IrSensorReadInfo,
+    ) {
+        let name = name.into();
+        self.sensor_pins.insert(name.clone(), pin.into());
+        self.sensors.insert(name, read_info);
     }
-    pub fn add_output(&mut self, name: impl Into<String>) {
-        self.outputs.insert(name.into());
+    pub fn add_output(&mut self, name: impl Into<String>, pin: impl Into<String>) {
+        self.outputs.insert(name.into(), pin.into());
     }
     pub fn add_variable(&mut self, name: impl Into<String>) {
         self.variables.insert(name.into());
@@ -535,8 +544,14 @@ impl IrLoweringContext {
     pub fn sensor_read_info(&self, name: &str) -> Option<&IrSensorReadInfo> {
         self.sensors.get(name)
     }
+    pub fn sensor_pin(&self, name: &str) -> Option<&String> {
+        self.sensor_pins.get(name)
+    }
     pub fn has_output(&self, name: &str) -> bool {
-        self.outputs.contains(name)
+        self.outputs.contains_key(name)
+    }
+    pub fn output_pin(&self, name: &str) -> Option<&String> {
+        self.outputs.get(name)
     }
     pub fn has_variable(&self, name: &str) -> bool {
         self.variables.contains(name)
@@ -609,18 +624,21 @@ mod tests {
         let mut ctx = IrLoweringContext::new();
         ctx.add_sensor(
             "temp_sensor".to_string(),
+            "A0".to_string(),
             IrSensorReadInfo {
                 value_type: IrType::Int,
                 converter: None,
             },
         );
-        ctx.add_output("led".to_string());
+        ctx.add_output("led".to_string(), "D0".to_string());
         ctx.add_variable("x".to_string());
 
         assert!(ctx.has_sensor("temp_sensor"));
         assert!(ctx.has_output("led"));
         assert!(ctx.has_variable("x"));
         assert!(!ctx.has_sensor("unknown"));
+        assert_eq!(ctx.sensor_pin("temp_sensor").map(String::as_str), Some("A0"));
+        assert_eq!(ctx.output_pin("led").map(String::as_str), Some("D0"));
     }
 
     #[test]

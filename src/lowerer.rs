@@ -52,6 +52,7 @@ pub fn lower_program(program: &Program) -> IrResult<IrProgram> {
 
                 ctx.add_sensor(
                     &sensor.name,
+                    &sensor.pin,
                     IrSensorReadInfo {
                         value_type: read_type,
                         converter: converter.clone(),
@@ -65,7 +66,7 @@ pub fn lower_program(program: &Program) -> IrResult<IrProgram> {
                 }));
             }
             TopLevel::OutputDef(output) => {
-                ctx.add_output(&output.name);
+                ctx.add_output(&output.name, &output.pin);
                 definitions.push(IrDefinition::Output(task_ir::IrOutput {
                     name: output.name.clone(),
                     pin: output.pin.clone(),
@@ -292,11 +293,15 @@ fn lower_statement(
                     value_type: IrType::Int,
                     converter: None,
                 });
+            let sensor_pin = ctx
+                .sensor_pin(sensor)
+                .cloned()
+                .unwrap_or_else(|| sensor.clone());
 
             ctx.add_variable(variable);
 
             Ok(IrStmt::Read {
-                sensor: sensor.clone(),
+                sensor: sensor_pin,
                 variable: variable.clone(),
                 value_type: read_info.value_type,
                 converter: read_info.converter,
@@ -314,10 +319,14 @@ fn lower_statement(
                     source_span: *span,
                 });
             }
+            let output_pin = ctx
+                .output_pin(output)
+                .cloned()
+                .unwrap_or_else(|| output.clone());
 
             let ir_value = lower_expr(value, ctx)?;
             Ok(IrStmt::Write {
-                output: output.clone(),
+                output: output_pin,
                 value: ir_value,
                 source_span: *span,
             })
